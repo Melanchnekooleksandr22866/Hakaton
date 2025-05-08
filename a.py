@@ -216,7 +216,10 @@ def draw_screen2():
     bullets.draw(window)
     hit_effects.update()
     hit_effects.draw(window)
-    if show_fuel:
+    if show_planet:
+        planet_rect = planet_image.get_rect(center=(win_width // 2, win_height // 2))
+        window.blit(planet_image, planet_rect)
+    elif show_fuel:
         elapsed = time.time() - fuel_blink_start_time
         alpha = 128 + int(127 * math.sin(elapsed * 5))  # Blink speed multiplier 5
         if alpha < 0:
@@ -277,6 +280,7 @@ class Player(sprite.Sprite):
         self.original_image_scaled = self.image
         self.damaged_image = transform.scale(image.load("raketa_gg.png").convert_alpha(), (width, height))
         self.can_move = True
+        self.can_shoot = True
 
     def update(self):
         current_time = time.time()
@@ -317,8 +321,11 @@ game = True
 screen2_start_time = None
 fuel_image_original = transform.scale(image.load("fuel.png").convert_alpha(), (420, 320))
 fuel_image = fuel_image_original.copy()
+planet_image_original = transform.scale(image.load("girl1.png").convert_alpha(), (420, 320))
+planet_image = planet_image_original.copy()
 fuel_blink_start_time = time.time()
 show_fuel = False
+show_planet = False
 
 class Meteor(sprite.Sprite):
     def __init__(self, image_path, x, y, width, height, speed):
@@ -514,26 +521,45 @@ while game:
                     player.move_up = True
                 elif e.key == K_DOWN or e.key == K_s:
                     player.move_down = True
-                elif e.key == K_SPACE and current_menu == "screen2":
+                if e.key == K_SPACE and current_menu == "screen2":
                     bullet_x = player.rect.right
                     bullet_y = player.rect.centery - 5  
-                    bullet = Bullet(bullet_x, bullet_y)
-                    bullets.add(bullet)
-                elif e.key == K_e and current_menu == "screen2":
+                    if player.can_shoot:
+                        bullet = Bullet(bullet_x, bullet_y)
+                        bullets.add(bullet)
+                if e.key == K_e and current_menu == "screen2":
                     # Cycle through texts on pressing E
                     if not hasattr(draw_screen2, "text_index"):
                         draw_screen2.text_index = 0
-                    draw_screen2.text_index = (draw_screen2.text_index + 1) % 3
-                    if draw_screen2.text_index == 0:
-                        draw_screen2.current_text = ["Ой-ой, у тебе закінчилося пальне."]
-                    elif draw_screen2.text_index == 1:
-                        draw_screen2.current_text = ["Дивися, он планета С-333", "сядь на неї й спробуй знайти пальне."]
-                    elif draw_screen2.text_index == 2:
-                        draw_screen2.current_text = ["Там є військова база, якщо не помиляюся."]
+                    if show_planet:
+                        # If planet is shown, do nothing on E
+                        pass
+                    else:
+                        if draw_screen2.text_index == 2:
+                            # On pressing E again after last text, show planet and hide fuel and text
+                            draw_screen2.current_text = ""
+                            show_planet = True
+                            show_fuel = False
+                        else:
+                            draw_screen2.text_index = (draw_screen2.text_index + 1) % 3
+                            if draw_screen2.text_index == 0:
+                                draw_screen2.current_text = ["Ой-ой, у тебе закінчилося пальне."]
+                                show_fuel = True
+                                show_planet = False
+                            elif draw_screen2.text_index == 1:
+                                draw_screen2.current_text = ["Дивися, он планета С-333", "сядь на неї й спробуй знайти пальне."]
+                                show_fuel = True
+                                show_planet = False
+                            elif draw_screen2.text_index == 2:
+                                draw_screen2.current_text = ["Там є військова база, якщо не помиляюся."]
+                                show_fuel = True
+                                show_planet = False
                 elif e.key == K_q and current_menu == "screen2":
                     # Reset to first text on pressing Q
                     draw_screen2.text_index = 0
                     draw_screen2.current_text = "Ой-ой, у тебе закінчилося пальне."
+                    show_planet = False
+                    show_fuel = True
             elif e.type == KEYUP:
                 if e.key == K_UP or e.key == K_w:
                     player.move_up = False
@@ -566,6 +592,8 @@ while game:
                 meteors.empty()
                 enemies.empty()
                 show_fuel = True
+                player.can_move = False
+                player.can_shoot = False
 
             if current_time - last_meteor_spawn_time >= meteor_spawn_interval:
                 if len(meteors) < max_meteors:
@@ -620,17 +648,74 @@ while game:
                 last_enemy_spawn_time = current_time
                 enemy_spawn_interval = randint(2, 5) 
 
-            draw_screen2() 
-            for meteor in meteors:
-                meteor.draw(window)
+            # Draw screen2 background and player, health, etc. without planet image
+            window.blit(background_screen2, (0, 0))
+            player.draw(window)
+            player.draw_health(window)
 
-            enemies.update()
-            for enemy in enemies:
-                enemy.draw(window)
+            if not show_planet:
+                for meteor in meteors:
+                    meteor.draw(window)
 
-            bullets.draw(window)
+                enemies.update()
+                for enemy in enemies:
+                    enemy.draw(window)
 
-            hit_effects.update()
-            hit_effects.draw(window)
+                bullets.draw(window)
+
+                hit_effects.update()
+                hit_effects.draw(window)
+            else:
+                # Draw planet image centered if show_planet is True
+                planet_rect = planet_image.get_rect(center=(win_width // 2, win_height // 2))
+                window.blit(planet_image, planet_rect)
+
+            # Draw enemy bullets always on top
+            enemy_bullets.draw(window)
+
+            # Draw fuel image and text if show_fuel is True
+            if show_fuel and not show_planet:
+                elapsed = time.time() - fuel_blink_start_time
+                alpha = 128 + int(127 * math.sin(elapsed * 5))  # Blink speed multiplier 5
+                if alpha < 0:
+                    alpha = 0
+                elif alpha > 255:
+                    alpha = 255
+                fuel_image = fuel_image_original.copy()
+                fuel_image.set_alpha(alpha)
+                fuel_rect = fuel_image.get_rect(midtop=(win_width // 2, 10))
+                window.blit(fuel_image, fuel_rect)
+
+                padding = 30
+                vertical_offset2 = 50
+                horizontal_offset = 55
+
+                # Text to display, default
+                if not hasattr(draw_screen2, "current_text"):
+                    draw_screen2.current_text = "Ой-ой, у тебе закінчилося пальне."
+
+                # Ensure current_text is a string before rendering
+                if isinstance(draw_screen2.current_text, list):
+                    text_to_render = "\n".join(draw_screen2.current_text)
+                else:
+                    text_to_render = draw_screen2.current_text
+
+                text2 = font3.render(text_to_render, True, (255, 255, 255))
+                # Calculate frame size based on text size and padding
+                frame2_width = text2.get_width() + padding * 2 + 100
+                frame2_height = text2.get_height() + padding * 2 + 80
+                # Position frame below fuel image with vertical offset
+                frame2_rect = Rect(0, 0, frame2_width, frame2_height)
+                frame2_rect.centerx = win_width // 2 + horizontal_offset
+                frame2_rect.top = fuel_rect.bottom + vertical_offset2
+                # Position text centered inside frame but slightly higher
+                text2_rect = text2.get_rect(center=(frame2_rect.centerx, frame2_rect.centery - 30))
+                frame2_surface = Surface((frame2_rect.width, frame2_rect.height), SRCALPHA)
+                transparent_gray = (200, 200, 200, 100)
+                frame2_surface.fill(transparent_gray)
+                window.blit(frame2_surface, frame2_rect.topleft)
+                window.blit(text2, text2_rect)
+
+            display.update()
 
 quit()
